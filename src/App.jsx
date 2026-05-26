@@ -116,7 +116,7 @@ function useGameClock(timeline, getTime) {
 
         timeline.events.forEach((ev, i) => {
           if (fired.current.has(i) || ev.t > now) return;
-          if (now - ev.t > 4) {
+          if (now - ev.t > 7) {
             fired.current.add(i);
             return;
           }
@@ -129,6 +129,8 @@ function useGameClock(timeline, getTime) {
               excitement: Math.min(1, next.excitement + (ev.points >= 3 ? 0.5 : 0.3)),
               lastScore: ev,
               lastScoreId: next.lastScoreId + 1,
+              activeCard: ev,
+              cardHistory: [ev, ...next.cardHistory],
             };
           } else if (ev.type === 'hype') {
             next = {
@@ -445,24 +447,59 @@ function VideoPlayer({ time, duration, playing, onTogglePlay, onSeek, shake, cli
 
 /* ------ CARDS ------ */
 
+function CardSection({ tag, tagColor, children }) {
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border)' }}>
+      <div
+        className="mono"
+        style={{ fontSize: 9, letterSpacing: '0.18em', color: tagColor || 'var(--muted-dim)', marginBottom: 6 }}
+      >
+        {tag}
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>{children}</div>
+    </div>
+  );
+}
+
 function Card({ event, dim, onClick }) {
   if (!event) return null;
   const type = event.type;
   const edgeCls =
-    type === 'term' ? 'edge-term' : type === 'ref' ? 'edge-ref' : type === 'lore' ? 'edge-lore' : 'edge-hype';
+    type === 'term'
+      ? 'edge-term'
+      : type === 'ref'
+      ? 'edge-ref'
+      : type === 'score'
+      ? 'edge-hype'
+      : type === 'lore'
+      ? 'edge-lore'
+      : 'edge-hype';
   const label =
     type === 'term'
-      ? 'RULE'
+      ? 'RULE IN PLAY'
       : type === 'ref'
       ? 'REF CALL'
+      : type === 'score'
+      ? 'SCORE'
       : type === 'lore'
-      ? event.subject === 'team'
-        ? 'TEAM LORE'
-        : 'PLAYER LORE'
+      ? event.subject === 'player'
+        ? 'PLAYER ON SCREEN'
+        : 'GAME CONTEXT'
       : 'MOMENT';
   const labelColor =
-    type === 'term' ? 'var(--green-bright)' : type === 'ref' ? 'var(--gold)' : type === 'lore' ? '#E8E8E8' : '#E03A3A';
-  const title = event.title || event.call || event.name || 'Moment';
+    type === 'term'
+      ? 'var(--green-bright)'
+      : type === 'ref'
+      ? 'var(--gold)'
+      : type === 'score'
+      ? '#E03A3A'
+      : type === 'lore'
+      ? '#E8E8E8'
+      : '#E03A3A';
+  const title =
+    type === 'score'
+      ? event.play || `${event.team === 'BOS' ? 'Boston' : 'Golden State'} +${event.points}`
+      : event.title || event.call || event.name || 'Moment';
 
   return (
     <div
@@ -479,24 +516,50 @@ function Card({ event, dim, onClick }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span className="mono" style={{ fontSize: 10, letterSpacing: '0.18em', color: labelColor, fontWeight: 600 }}>{label}</span>
-        <span className="mono tnum" style={{ fontSize: 10, color: 'var(--muted-dim)' }}>{formatT(event.t)}</span>
+        <span className="mono" style={{ fontSize: 10, letterSpacing: '0.18em', color: labelColor, fontWeight: 600 }}>
+          {label}
+        </span>
+        <span className="mono tnum" style={{ fontSize: 10, color: 'var(--muted-dim)' }}>
+          {formatT(event.t)}
+        </span>
       </div>
       <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.25, marginBottom: 6 }}>{title}</div>
+      {type === 'score' && (
+        <div className="mono tnum" style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+          Score now · BOS {event.homeScore} — GSW {event.awayScore}
+        </div>
+      )}
+      {event.onScreen && (
+        <CardSection tag="WHAT YOU'RE SEEING" tagColor="var(--green-bright)">
+          {event.onScreen}
+        </CardSection>
+      )}
       {event.body && (
-        <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>{event.body}</div>
+        <div
+          style={{
+            fontSize: 13,
+            color: event.onScreen ? 'var(--muted)' : 'var(--text)',
+            lineHeight: 1.5,
+            marginTop: event.onScreen ? 8 : 0,
+          }}
+        >
+          {event.body}
+        </div>
+      )}
+      {event.commentary && (
+        <CardSection tag="ANNOUNCER" tagColor="var(--gold)">
+          <span style={{ fontStyle: 'italic' }}>&ldquo;{event.commentary}&rdquo;</span>
+        </CardSection>
       )}
       {event.why && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border)', fontSize: 12, color: 'var(--muted)' }}>
-          <span className="mono" style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--muted-dim)', marginRight: 8 }}>WHY IT MATTERS</span>
+        <CardSection tag="ROOKIE TAKEAWAY" tagColor="var(--muted-dim)">
           {event.why}
-        </div>
+        </CardSection>
       )}
       {event.signal && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border)', fontSize: 12, color: 'var(--muted)' }}>
-          <span className="mono" style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--gold)', marginRight: 8 }}>REF SIGNAL</span>
+        <CardSection tag="REF SIGNAL" tagColor="var(--gold)">
           {event.signal}
-        </div>
+        </CardSection>
       )}
     </div>
   );
@@ -685,7 +748,7 @@ function PreRollCard() {
       </div>
       <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Rookie Mode is on</div>
       <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
-        As the game happens, this panel will explain rules, ref calls, and players in plain language. Don&apos;t worry about catching everything — the cards stick around in the history below.
+        As the game happens, this panel explains what you&apos;re seeing on screen, what the announcers are talking about, and the rules behind each play — in plain language. Cards stay in the history below if you miss one.
       </div>
     </div>
   );
